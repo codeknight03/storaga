@@ -1,34 +1,35 @@
 package fops
 
-// Defines the appendable records and parts of them
+// On-disk record layout (little-endian, 20-byte header):
+//
+//	| crc u32 | ts u64 | keyLen u32 | valLen u32 | key bytes … | val bytes … |
+//	  0         4        12           16           20
+//
+// crc covers every byte after itself (header + key + val).
 
-// Final record we are looking to store on disk
-// | CRC | timestamp | key len | value len | key bytes … | value bytes … |
-
-// header is the representative type for the CRC timestamp and the two lens
+// header is the fixed-size prefix of every record.
 type header struct {
-
-	// implementing CRC-32 later so going for a uint32 ( to save the 32 bits (4 bytes ) / reccord as this is 64 bit system)
+	// CRC-32 (IEEE) of everything after this field.
 	crc uint32
-	// for timestamp using the well recognized global timestamp till nanosecond precision
-	// ( unsure of how many bytes is this per record and how do I even calculate that)
-	// later found that really mostly this is stored as he unix timestamp only so
+
+	// Unix time in nanoseconds when the record was built.
+	// Open: how many bytes a timestamp needs per record — settled on u64 Unix ns,
+	// since that's the common way to store it.
 	ts uint64
 
-	// Deciding the size of the length of a key and value before we know how long can they be, should we have a limit on how long a record can be do databases do that ?
-	// ( refering to DBs because they are the standard of file IO) , I think they do for example postgres limits num column
-	// Using a full 64bit integer here as lens can't be floating I think this should suffice a 64bit len means I am
-	// storing something 2^64 byte long, i.e. something beyond this universe can store
-	// and since I am stupid I used this to calculate that which is ridiculous >>> (256*256*256*256*256*256*256*256)/1024/1024/1024/1024
-	//16777216
-	// that's insane I think let's see what redis allows they allow 512mb / key or value
-	// which can be reped by a 2^29 length
+	// Decision: width of the key/value length fields.
+	// Options:
+	//   - uint64: 2^64 bytes (~16 EiB), far beyond any real need.
+	//   - uint32 + a max size: Redis caps keys/values at 512 MB (2^29 bytes).
+	//   (Postgres also limits columns, so DBs do impose limits.)
+	// Why: uint32 with a 512 MiB cap (MAXLENKEYVAL) matches a real system and
+	//      fits easily in 32 bits.
+	// Revisit if: TBD.
 	keyLen uint32
 	valLen uint32
 }
 
-// Record reps a full record this the unit of operation all
-// appends and gets will be of this quantum
+// Record is the unit every append (and later, read) operates on.
 type Record struct {
 	header header
 	key    []byte
