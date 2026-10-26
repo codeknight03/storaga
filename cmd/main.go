@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	// start a file
+	// Open (or create) the store file. O_APPEND is required: Put relies on it.
 	fd, err := os.OpenFile("kvstore.bin", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
 		fmt.Printf("Couldn't open the specified file")
